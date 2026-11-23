@@ -1,0 +1,42 @@
+name: tts
+# Genera gli audio delle notizie di Segnale con Piper (voce neurale italiana)
+# sui server di GitHub, cosi' il PC di Teo non consuma RAM.
+on:
+  push:
+    paths: [jobs.json]
+  workflow_dispatch:
+concurrency:
+  group: tts
+  cancel-in-progress: false
+jobs:
+  tts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cache pip e voce
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            voci
+          key: piper-venv-paola-medium-v2
+      - name: Installa Piper
+        run: |
+          test -x .venv/bin/python || (python -m venv .venv && .venv/bin/pip install -q piper-tts)
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+          export PATH="$PWD/.venv/bin:$PATH"
+          which ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+          mkdir -p voci
+          test -f voci/it_IT-paola-medium.onnx || (cd voci && python -m piper.download_voices it_IT-paola-medium)
+      - name: Sintesi
+        run: python tts.py jobs.json out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audio
+          path: out/
+          retention-days: 2
+          if-no-files-found: ignore
